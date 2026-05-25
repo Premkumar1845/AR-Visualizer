@@ -1,0 +1,129 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+    :root {
+        color-scheme: dark;
+    }
+
+    html,
+    body,
+    #root {
+        height: 100%;
+    }
+
+    body {
+        font-family: 'Inter', system-ui, sans-serif;
+        background-color: #070708;
+        color: #f5f7fa;
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+        overflow-x: hidden;
+    }
+
+    ::selection {
+        background: rgba(123, 97, 255, 0.35);
+        color: #fff;
+    }
+}
+
+@layer components {
+    .glass {
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        backdrop-filter: blur(20px) saturate(140%);
+        -webkit-backdrop-filter: blur(20px) saturate(140%);
+    }
+
+    .glass-strong {
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(28px) saturate(160%);
+        -webkit-backdrop-filter: blur(28px) saturate(160%);
+    }
+
+    .hairline {
+        border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .text-gradient {
+        background: linear-gradient(135deg, #f5f7fa 0%, #c8b8ff 55%, #8ea7ff 100%);
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+        color: transparent;
+    }
+
+    .text-gradient-accent {
+        background: linear-gradient(135deg, #b9a7ff 0%, #7b61ff 60%, #8ea7ff 100%);
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+        color: transparent;
+    }
+
+    .btn-primary {
+        @apply relative inline-flex items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-medium text-white transition-all duration-300;
+        background: linear-gradient(135deg, #7b61ff 0%, #5a45d6 100%);
+        box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12) inset, 0 8px 30px rgba(123, 97, 255, 0.35);
+    }
+
+    .btn-primary:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18) inset, 0 14px 40px rgba(123, 97, 255, 0.55);
+    }
+
+    .btn-ghost {
+        @apply inline-flex items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-medium text-text-primary transition-all duration-300;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .btn-ghost:hover {
+        background: rgba(255, 255, 255, 0.08);
+        border-color: rgba(255, 255, 255, 0.18);
+    }
+
+    .pill {
+        @apply inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium tracking-wide;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: #c9cfdc;
+    }
+
+    .input-field {
+        @apply w-full rounded-xl bg-transparent px-4 py-3 text-sm text-text-primary placeholder:text-text-dim outline-none transition-all;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .input-field:focus {
+        border-color: rgba(123, 97, 255, 0.55);
+        box-shadow: 0 0 0 4px rgba(123, 97, 255, 0.15);
+    }
+
+    .noise::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.5 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/></svg>");
+        opacity: 0.06;
+        mix-blend-mode: overlay;
+    }
+}
+
+@layer utilities {
+    .scrollbar-hidden::-webkit-scrollbar {
+        display: none;
+    }
+
+    .scrollbar-hidden {
+        scrollbar-width: none;
+    }
+
+    .mask-fade-b {
+        -webkit-mask-image: linear-gradient(180deg, #000 60%, transparent 100%);
+        mask-image: linear-gradient(180deg, #000 60%, transparent 100%);
+    }
+}
