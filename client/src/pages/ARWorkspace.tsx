@@ -64,6 +64,8 @@ export default function ARWorkspace() {
     const [xrSupported, setXrSupported] = useState(false);
     const [xrChecked, setXrChecked] = useState(false);
     const [bannerDismissed, setBannerDismissed] = useState(false);
+    const [xrError, setXrError] = useState<string | null>(null);
+    const [showDiag, setShowDiag] = useState(false);
 
     const isSecure =
         typeof window !== 'undefined' &&
@@ -73,8 +75,12 @@ export default function ARWorkspace() {
         /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
     const isIOS =
         typeof navigator !== 'undefined' && /iPhone|iPad|iPod/i.test(navigator.userAgent);
+    const hasNavXR = typeof navigator !== 'undefined' && 'xr' in navigator;
+    const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : '';
 
-    useEffect(() => {
+    const recheckXR = () => {
+        setXrChecked(false);
+        setXrError(null);
         if (typeof navigator !== 'undefined' && 'xr' in navigator) {
             // @ts-ignore
             navigator.xr
@@ -83,13 +89,21 @@ export default function ARWorkspace() {
                     setXrSupported(ok);
                     setXrChecked(true);
                 })
-                .catch(() => {
+                .catch((e: any) => {
                     setXrSupported(false);
+                    setXrError(e?.message || String(e));
                     setXrChecked(true);
                 });
         } else {
+            setXrSupported(false);
+            setXrError('navigator.xr is not available in this browser.');
             setXrChecked(true);
         }
+    };
+
+    useEffect(() => {
+        recheckXR();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const arUnsupportedReason = (() => {
@@ -201,6 +215,64 @@ export default function ARWorkspace() {
                         <div className="mt-0.5 text-amber-100/80">
                             {arUnsupportedReason} You can still build and preview your scene in 3D here — only camera passthrough needs a compatible device.
                         </div>
+                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                            <span
+                                className={`rounded-md px-1.5 py-0.5 text-[10.5px] ${
+                                    isSecure ? 'bg-emerald-500/15 text-emerald-200' : 'bg-rose-500/15 text-rose-200'
+                                }`}
+                            >
+                                HTTPS: {isSecure ? 'yes' : 'no'}
+                            </span>
+                            <span
+                                className={`rounded-md px-1.5 py-0.5 text-[10.5px] ${
+                                    hasNavXR ? 'bg-emerald-500/15 text-emerald-200' : 'bg-rose-500/15 text-rose-200'
+                                }`}
+                            >
+                                navigator.xr: {hasNavXR ? 'present' : 'missing'}
+                            </span>
+                            <span
+                                className={`rounded-md px-1.5 py-0.5 text-[10.5px] ${
+                                    isMobile && !isIOS
+                                        ? 'bg-emerald-500/15 text-emerald-200'
+                                        : 'bg-amber-500/15 text-amber-200'
+                                }`}
+                            >
+                                Device: {isIOS ? 'iOS' : isMobile ? 'Android/Mobile' : 'Desktop'}
+                            </span>
+                            <span className="rounded-md bg-rose-500/15 px-1.5 py-0.5 text-[10.5px] text-rose-200">
+                                immersive-ar: false
+                            </span>
+                            <button
+                                onClick={recheckXR}
+                                className="ml-1 rounded-md bg-white/10 px-2 py-0.5 text-[10.5px] text-amber-50 hover:bg-white/15"
+                            >
+                                Re-check
+                            </button>
+                            <button
+                                onClick={() => setShowDiag((v) => !v)}
+                                className="rounded-md bg-white/10 px-2 py-0.5 text-[10.5px] text-amber-50 hover:bg-white/15"
+                            >
+                                {showDiag ? 'Hide details' : 'Show details'}
+                            </button>
+                        </div>
+                        {showDiag && (
+                            <div className="mt-2 break-all rounded-lg bg-black/30 p-2 font-mono text-[10.5px] leading-relaxed text-amber-100/80">
+                                <div>UA: {userAgent}</div>
+                                {xrError && <div className="mt-1 text-rose-200">Error: {xrError}</div>}
+                                <div className="mt-1">
+                                    Try Google&apos;s reference sample:&nbsp;
+                                    <a
+                                        href="https://immersive-web.github.io/webxr-samples/immersive-ar-session.html"
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="underline"
+                                    >
+                                        immersive-ar-session
+                                    </a>
+                                    . If that also fails, the device/browser lacks WebXR AR.
+                                </div>
+                            </div>
+                        )}
                     </div>
                     <button
                         onClick={() => setBannerDismissed(true)}
@@ -401,8 +473,8 @@ export default function ARWorkspace() {
                     <button
                         onClick={() => setShadows(!shadows)}
                         className={`flex w-full items-center justify-between rounded-lg border px-3 py-1.5 text-xs ${shadows
-                                ? 'border-accent/30 bg-accent/10 text-accent-soft'
-                                : 'border-white/10 bg-white/[0.02] text-text-muted'
+                            ? 'border-accent/30 bg-accent/10 text-accent-soft'
+                            : 'border-white/10 bg-white/[0.02] text-text-muted'
                             }`}
                     >
                         {shadows ? 'Enabled' : 'Disabled'}
@@ -428,8 +500,8 @@ export default function ARWorkspace() {
                             key={t.id}
                             onClick={() => setTool(t.id as any)}
                             className={`relative flex items-center gap-1.5 rounded-full px-3 py-2 text-xs font-medium transition ${tool === t.id
-                                    ? 'bg-white/[0.08] text-text-primary'
-                                    : 'text-text-muted hover:bg-white/[0.04]'
+                                ? 'bg-white/[0.08] text-text-primary'
+                                : 'text-text-muted hover:bg-white/[0.04]'
                                 }`}
                         >
                             <t.icon className="h-3.5 w-3.5" />
