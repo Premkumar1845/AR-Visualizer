@@ -1,0 +1,439 @@
+import { useEffect, useState } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { Canvas } from '@react-three/fiber';
+import { OrbitControls, Environment, ContactShadows, Grid } from '@react-three/drei';
+import { XR, createXRStore } from '@react-three/xr';
+import { motion } from 'framer-motion';
+import {
+    Move3d,
+    RotateCcw,
+    Maximize2,
+    Copy,
+    Trash2,
+    Camera as CameraIcon,
+    Sparkles,
+    Save,
+    Plus,
+    Box,
+    Cylinder,
+    Cone,
+    Circle,
+    Sun,
+    Droplet,
+    Palette,
+    Layers,
+} from 'lucide-react';
+import toast from 'react-hot-toast';
+import { useSceneStore } from '../store/sceneStore';
+import { sceneService } from '../services/scene.service';
+import PlacedObject from '../xr/PlacedObject';
+
+const xrStore = createXRStore();
+
+export default function ARWorkspace() {
+    const [params] = useSearchParams();
+    const navigate = useNavigate();
+    const sceneIdParam = params.get('scene');
+
+    const {
+        objects,
+        selectedId,
+        tool,
+        lighting,
+        reflections,
+        shadows,
+        color,
+        add,
+        remove,
+        duplicate,
+        select,
+        update,
+        setTool,
+        setLighting,
+        setReflections,
+        setShadows,
+        setColor,
+        load,
+        clear,
+    } = useSceneStore();
+
+    const [sceneName, setSceneName] = useState('Untitled Spatial Scene');
+    const [saving, setSaving] = useState(false);
+    const [xrSupported, setXrSupported] = useState(false);
+
+    useEffect(() => {
+        if (typeof navigator !== 'undefined' && 'xr' in navigator) {
+            // @ts-ignore
+            navigator.xr?.isSessionSupported?.('immersive-ar').then(setXrSupported).catch(() => setXrSupported(false));
+        }
+    }, []);
+
+    useEffect(() => {
+        if (sceneIdParam) {
+            sceneService
+                .get(sceneIdParam)
+                .then((d) => {
+                    setSceneName(d.scene.name);
+                    load(d.scene.objects || []);
+                    toast.success(`Loaded "${d.scene.name}"`);
+                })
+                .catch(() => toast.error('Could not load scene'));
+        } else {
+            clear();
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [sceneIdParam]);
+
+    const startAR = () => {
+        if (!xrSupported) {
+            toast('WebXR not available — open in HTTPS on a compatible mobile browser', { icon: 'ⓘ' });
+            return;
+        }
+        xrStore.enterAR();
+    };
+
+    const addShape = (shape: 'cube' | 'sphere' | 'cylinder' | 'cone') => {
+        add({
+            shape,
+            position: [
+                (Math.random() - 0.5) * 0.6,
+                shape === 'sphere' ? 0.25 : 0.25,
+                (Math.random() - 0.5) * 0.6,
+            ],
+            rotation: [0, 0, 0],
+            scale: [0.4, 0.4, 0.4],
+            color,
+        });
+    };
+
+    const onSave = async () => {
+        setSaving(true);
+        try {
+            if (sceneIdParam) {
+                await sceneService.update(sceneIdParam, { name: sceneName, objects });
+                toast.success('Scene updated');
+            } else {
+                const { scene } = await sceneService.create({ name: sceneName, objects });
+                toast.success('Scene saved');
+                navigate(`/ar?scene=${scene.id}`, { replace: true });
+            }
+        } catch (err: any) {
+            toast.error(err?.response?.data?.message || 'Could not save scene');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const selectedObj = objects.find((o) => o.id === selectedId);
+
+    return (
+        <div className="relative h-[calc(100vh-56px)] lg:h-screen">
+            {/* Top bar */}
+            <div className="absolute inset-x-0 top-0 z-30 flex items-center justify-between gap-3 border-b border-white/[0.06] bg-ink-950/70 px-4 py-3 backdrop-blur-xl">
+                <div className="flex min-w-0 items-center gap-3">
+                    <div className="pill">
+                        <Sparkles className="h-3 w-3 text-accent-soft" /> AR Workspace
+                    </div>
+                    <input
+                        value={sceneName}
+                        onChange={(e) => setSceneName(e.target.value)}
+                        className="min-w-0 truncate bg-transparent text-sm font-medium outline-none"
+                    />
+                </div>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={startAR}
+                        className="hidden items-center gap-1.5 rounded-full border border-accent/30 bg-accent/10 px-3 py-1.5 text-xs text-accent-soft hover:bg-accent/15 sm:flex"
+                    >
+                        <CameraIcon className="h-3.5 w-3.5" />
+                        {xrSupported ? 'Enter AR' : 'AR (unsupported)'}
+                    </button>
+                    <button onClick={onSave} disabled={saving} className="btn-primary px-4 py-2 text-xs">
+                        <Save className="h-3.5 w-3.5" /> {saving ? 'Saving…' : 'Save'}
+                    </button>
+                </div>
+            </div>
+
+            {/* Add palette */}
+            <div className="absolute left-3 top-20 z-20 flex flex-col gap-1.5 rounded-2xl border border-white/[0.06] bg-ink-900/80 p-1.5 shadow-glass backdrop-blur-xl">
+                {[
+                    { s: 'cube', icon: Box, label: 'Cube' },
+                    { s: 'sphere', icon: Circle, label: 'Sphere' },
+                    { s: 'cylinder', icon: Cylinder, label: 'Cylinder' },
+                    { s: 'cone', icon: Cone, label: 'Cone' },
+                ].map((b) => (
+                    <button
+                        key={b.s}
+                        title={`Add ${b.label}`}
+                        onClick={() => addShape(b.s as any)}
+                        className="grid h-9 w-9 place-items-center rounded-xl text-text-muted hover:bg-white/[0.06] hover:text-text-primary"
+                    >
+                        <b.icon className="h-4 w-4" />
+                    </button>
+                ))}
+                <div className="my-1 h-px bg-white/[0.06]" />
+                <button
+                    onClick={() => addShape('cube')}
+                    className="grid h-9 w-9 place-items-center rounded-xl bg-accent/15 text-accent-soft hover:bg-accent/25"
+                    title="Quick add"
+                >
+                    <Plus className="h-4 w-4" />
+                </button>
+            </div>
+
+            {/* Canvas */}
+            <Canvas
+                shadows
+                dpr={[1, 2]}
+                gl={{ antialias: true, alpha: true }}
+                camera={{ position: [2.2, 1.6, 2.6], fov: 50 }}
+                className="!h-full !w-full"
+            >
+                <XR store={xrStore}>
+                    <color attach="background" args={['#070708']} />
+                    <fog attach="fog" args={['#070708', 8, 18]} />
+
+                    <ambientLight intensity={0.35 * lighting} />
+                    <directionalLight
+                        position={[4, 6, 3]}
+                        intensity={1.2 * lighting}
+                        color="#ffffff"
+                        castShadow
+                        shadow-mapSize={[1024, 1024]}
+                    />
+                    <directionalLight position={[-3, 2, -4]} intensity={0.4 * lighting} color="#8ea7ff" />
+
+                    <Environment preset="city" environmentIntensity={reflections} />
+
+                    <Grid
+                        args={[20, 20]}
+                        cellSize={0.5}
+                        cellThickness={0.5}
+                        cellColor="#2a2d36"
+                        sectionSize={2.5}
+                        sectionThickness={1}
+                        sectionColor="#7b61ff"
+                        fadeDistance={14}
+                        fadeStrength={1.2}
+                        infiniteGrid
+                        position={[0, 0, 0]}
+                    />
+
+                    {shadows && (
+                        <ContactShadows
+                            position={[0, 0.001, 0]}
+                            opacity={0.5}
+                            scale={12}
+                            blur={2.4}
+                            far={3}
+                            color="#000000"
+                        />
+                    )}
+
+                    {objects.map((o) => (
+                        <PlacedObject
+                            key={o.id}
+                            obj={o}
+                            selected={o.id === selectedId}
+                            onSelect={() => select(o.id)}
+                        />
+                    ))}
+
+                    <OrbitControls
+                        makeDefault
+                        enableDamping
+                        dampingFactor={0.08}
+                        minDistance={1}
+                        maxDistance={8}
+                        maxPolarAngle={Math.PI / 2.05}
+                    />
+                </XR>
+            </Canvas>
+
+            {/* Right Sidebar */}
+            <aside className="absolute right-3 top-20 z-20 flex max-h-[calc(100vh-180px)] w-72 flex-col gap-3 overflow-y-auto rounded-2xl border border-white/[0.06] bg-ink-900/80 p-4 shadow-glass backdrop-blur-xl scrollbar-hidden">
+                <div className="flex items-center justify-between">
+                    <div className="font-manrope text-sm font-semibold">Inspector</div>
+                    <span className="text-[10px] uppercase tracking-widest text-text-dim">
+                        {selectedObj ? selectedObj.shape : 'None selected'}
+                    </span>
+                </div>
+
+                {selectedObj ? (
+                    <>
+                        <PanelSection icon={Palette} title="Color">
+                            <div className="grid grid-cols-7 gap-1.5">
+                                {['#8ea7ff', '#7b61ff', '#a48dff', '#F5F7FA', '#34d399', '#fbbf24', '#f43f5e'].map(
+                                    (c) => (
+                                        <button
+                                            key={c}
+                                            onClick={() => setColor(c)}
+                                            style={{ background: c }}
+                                            className={`h-6 w-6 rounded-full ring-1 ring-white/15 transition-transform ${selectedObj.color === c ? 'scale-110 ring-white/60' : ''
+                                                }`}
+                                        />
+                                    ),
+                                )}
+                            </div>
+                        </PanelSection>
+
+                        <PanelSection icon={Maximize2} title="Scale">
+                            <input
+                                type="range"
+                                min={0.1}
+                                max={2}
+                                step={0.05}
+                                value={selectedObj.scale[0]}
+                                onChange={(e) => {
+                                    const v = parseFloat(e.target.value);
+                                    update(selectedObj.id, { scale: [v, v, v] });
+                                }}
+                                className="w-full accent-accent"
+                            />
+                        </PanelSection>
+
+                        <PanelSection icon={RotateCcw} title="Rotation Y">
+                            <input
+                                type="range"
+                                min={0}
+                                max={Math.PI * 2}
+                                step={0.05}
+                                value={selectedObj.rotation[1]}
+                                onChange={(e) => {
+                                    const v = parseFloat(e.target.value);
+                                    update(selectedObj.id, {
+                                        rotation: [selectedObj.rotation[0], v, selectedObj.rotation[2]],
+                                    });
+                                }}
+                                className="w-full accent-accent"
+                            />
+                        </PanelSection>
+                    </>
+                ) : (
+                    <p className="rounded-xl border border-dashed border-white/[0.08] p-4 text-center text-xs text-text-dim">
+                        Select an object in the scene or add one from the left palette.
+                    </p>
+                )}
+
+                <div className="my-1 h-px bg-white/[0.06]" />
+
+                <PanelSection icon={Sun} title="Lighting">
+                    <input
+                        type="range"
+                        min={0}
+                        max={2}
+                        step={0.05}
+                        value={lighting}
+                        onChange={(e) => setLighting(parseFloat(e.target.value))}
+                        className="w-full accent-accent"
+                    />
+                </PanelSection>
+                <PanelSection icon={Droplet} title="Reflections">
+                    <input
+                        type="range"
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        value={reflections}
+                        onChange={(e) => setReflections(parseFloat(e.target.value))}
+                        className="w-full accent-accent"
+                    />
+                </PanelSection>
+                <PanelSection icon={Layers} title="Shadows">
+                    <button
+                        onClick={() => setShadows(!shadows)}
+                        className={`flex w-full items-center justify-between rounded-lg border px-3 py-1.5 text-xs ${shadows
+                                ? 'border-accent/30 bg-accent/10 text-accent-soft'
+                                : 'border-white/10 bg-white/[0.02] text-text-muted'
+                            }`}
+                    >
+                        {shadows ? 'Enabled' : 'Disabled'}
+                        <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                    </button>
+                </PanelSection>
+            </aside>
+
+            {/* Bottom toolbar */}
+            <motion.div
+                initial={{ y: 30, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+                className="absolute inset-x-0 bottom-4 z-20 flex justify-center px-4"
+            >
+                <div className="flex items-center gap-1 rounded-full border border-white/[0.08] bg-ink-900/80 p-1.5 shadow-glass backdrop-blur-2xl">
+                    {[
+                        { id: 'move', icon: Move3d, label: 'Move' },
+                        { id: 'rotate', icon: RotateCcw, label: 'Rotate' },
+                        { id: 'scale', icon: Maximize2, label: 'Scale' },
+                    ].map((t) => (
+                        <button
+                            key={t.id}
+                            onClick={() => setTool(t.id as any)}
+                            className={`relative flex items-center gap-1.5 rounded-full px-3 py-2 text-xs font-medium transition ${tool === t.id
+                                    ? 'bg-white/[0.08] text-text-primary'
+                                    : 'text-text-muted hover:bg-white/[0.04]'
+                                }`}
+                        >
+                            <t.icon className="h-3.5 w-3.5" />
+                            <span className="hidden sm:inline">{t.label}</span>
+                        </button>
+                    ))}
+                    <div className="mx-1 h-5 w-px bg-white/[0.08]" />
+                    <button
+                        disabled={!selectedId}
+                        onClick={() => selectedId && duplicate(selectedId)}
+                        className="flex items-center gap-1.5 rounded-full px-3 py-2 text-xs text-text-muted hover:bg-white/[0.04] disabled:opacity-30"
+                    >
+                        <Copy className="h-3.5 w-3.5" />
+                        <span className="hidden sm:inline">Duplicate</span>
+                    </button>
+                    <button
+                        disabled={!selectedId}
+                        onClick={() => selectedId && remove(selectedId)}
+                        className="flex items-center gap-1.5 rounded-full px-3 py-2 text-xs text-text-muted hover:bg-rose-500/10 hover:text-rose-400 disabled:opacity-30"
+                    >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        <span className="hidden sm:inline">Delete</span>
+                    </button>
+                    <button
+                        onClick={() => {
+                            const c = document.querySelector('canvas');
+                            if (!c) return;
+                            const data = c.toDataURL('image/png');
+                            const a = document.createElement('a');
+                            a.href = data;
+                            a.download = `${sceneName.replace(/\s+/g, '-').toLowerCase()}.png`;
+                            a.click();
+                            toast.success('Snapshot saved');
+                        }}
+                        className="flex items-center gap-1.5 rounded-full px-3 py-2 text-xs text-text-muted hover:bg-white/[0.04]"
+                    >
+                        <CameraIcon className="h-3.5 w-3.5" />
+                        <span className="hidden sm:inline">Snapshot</span>
+                    </button>
+                </div>
+            </motion.div>
+        </div>
+    );
+}
+
+function PanelSection({
+    icon: Icon,
+    title,
+    children,
+}: {
+    icon: any;
+    title: string;
+    children: React.ReactNode;
+}) {
+    return (
+        <div className="rounded-xl border border-white/[0.05] bg-white/[0.02] p-3">
+            <div className="mb-2 flex items-center gap-2 text-[11px] uppercase tracking-widest text-text-dim">
+                <Icon className="h-3 w-3" />
+                {title}
+            </div>
+            {children}
+        </div>
+    );
+}
+
