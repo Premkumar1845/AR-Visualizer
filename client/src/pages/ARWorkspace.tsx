@@ -22,6 +22,8 @@ import {
     Droplet,
     Palette,
     Layers,
+    Info,
+    X,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useSceneStore } from '../store/sceneStore';
@@ -60,13 +62,44 @@ export default function ARWorkspace() {
     const [sceneName, setSceneName] = useState('Untitled Spatial Scene');
     const [saving, setSaving] = useState(false);
     const [xrSupported, setXrSupported] = useState(false);
+    const [xrChecked, setXrChecked] = useState(false);
+    const [bannerDismissed, setBannerDismissed] = useState(false);
+
+    const isSecure =
+        typeof window !== 'undefined' &&
+        (window.isSecureContext || window.location.hostname === 'localhost');
+    const isMobile =
+        typeof navigator !== 'undefined' &&
+        /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    const isIOS =
+        typeof navigator !== 'undefined' && /iPhone|iPad|iPod/i.test(navigator.userAgent);
 
     useEffect(() => {
         if (typeof navigator !== 'undefined' && 'xr' in navigator) {
             // @ts-ignore
-            navigator.xr?.isSessionSupported?.('immersive-ar').then(setXrSupported).catch(() => setXrSupported(false));
+            navigator.xr
+                ?.isSessionSupported?.('immersive-ar')
+                .then((ok: boolean) => {
+                    setXrSupported(ok);
+                    setXrChecked(true);
+                })
+                .catch(() => {
+                    setXrSupported(false);
+                    setXrChecked(true);
+                });
+        } else {
+            setXrChecked(true);
         }
     }, []);
+
+    const arUnsupportedReason = (() => {
+        if (!isSecure) return 'AR requires HTTPS. Open this site over https://… not http://.';
+        if (isIOS)
+            return 'iOS Safari does not support WebXR AR. Use an Android device with Chrome, or a WebXR-capable headset.';
+        if (!isMobile)
+            return 'AR mode needs a mobile device (Android Chrome) or a WebXR-capable headset. Open this page on your phone to enter AR.';
+        return 'WebXR AR not detected. Make sure you are using the latest Chrome on Android with Google Play Services for AR (ARCore) installed.';
+    })();
 
     useEffect(() => {
         if (sceneIdParam) {
@@ -86,7 +119,8 @@ export default function ARWorkspace() {
 
     const startAR = () => {
         if (!xrSupported) {
-            toast('WebXR not available — open in HTTPS on a compatible mobile browser', { icon: 'ⓘ' });
+            toast(arUnsupportedReason, { icon: 'ⓘ', duration: 5000 });
+            setBannerDismissed(false);
             return;
         }
         xrStore.enterAR();
@@ -153,6 +187,30 @@ export default function ARWorkspace() {
                     </button>
                 </div>
             </div>
+
+            {/* AR-unsupported banner */}
+            {xrChecked && !xrSupported && !bannerDismissed && (
+                <motion.div
+                    initial={{ opacity: 0, y: -8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="absolute inset-x-0 top-[57px] z-20 mx-auto flex max-w-3xl items-start gap-3 border-b border-amber-400/20 bg-amber-400/[0.07] px-4 py-2.5 text-[12.5px] text-amber-100 backdrop-blur-md sm:rounded-b-2xl sm:border-x"
+                >
+                    <Info className="mt-0.5 h-4 w-4 flex-none text-amber-300" />
+                    <div className="min-w-0 flex-1">
+                        <div className="font-medium text-amber-50">AR session not available on this device</div>
+                        <div className="mt-0.5 text-amber-100/80">
+                            {arUnsupportedReason} You can still build and preview your scene in 3D here — only camera passthrough needs a compatible device.
+                        </div>
+                    </div>
+                    <button
+                        onClick={() => setBannerDismissed(true)}
+                        aria-label="Dismiss"
+                        className="rounded-md p-1 text-amber-200/70 hover:bg-white/[0.06] hover:text-amber-50"
+                    >
+                        <X className="h-3.5 w-3.5" />
+                    </button>
+                </motion.div>
+            )}
 
             {/* Add palette */}
             <div className="absolute left-3 top-20 z-20 flex flex-col gap-1.5 rounded-2xl border border-white/[0.06] bg-ink-900/80 p-1.5 shadow-glass backdrop-blur-xl">
