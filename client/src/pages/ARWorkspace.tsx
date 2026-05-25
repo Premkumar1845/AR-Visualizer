@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Environment, ContactShadows, Grid } from '@react-three/drei';
@@ -66,6 +66,15 @@ export default function ARWorkspace() {
     const [bannerDismissed, setBannerDismissed] = useState(false);
     const [xrError, setXrError] = useState<string | null>(null);
     const [showDiag, setShowDiag] = useState(false);
+    const [cameraOn, setCameraOn] = useState(false);
+    const [cameraStarting, setCameraStarting] = useState(false);
+    const videoRef = useRef<HTMLVideoElement | null>(null);
+    const streamRef = useRef<MediaStream | null>(null);
+
+    const hasGetUserMedia =
+        typeof navigator !== 'undefined' &&
+        !!navigator.mediaDevices &&
+        typeof navigator.mediaDevices.getUserMedia === 'function';
 
     const isSecure =
         typeof window !== 'undefined' &&
@@ -131,13 +140,57 @@ export default function ARWorkspace() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [sceneIdParam]);
 
-    const startAR = () => {
-        if (!xrSupported) {
-            toast(arUnsupportedReason, { icon: 'ⓘ', duration: 5000 });
-            setBannerDismissed(false);
+    const startCameraAR = async () => {
+        if (!hasGetUserMedia) {
+            toast.error('Camera API not available in this browser.');
             return;
         }
-        xrStore.enterAR();
+        if (!isSecure) {
+            toast.error('Camera requires HTTPS. Open the https:// URL.');
+            return;
+        }
+        setCameraStarting(true);
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: { ideal: 'environment' } as any },
+                audio: false,
+            });
+            streamRef.current = stream;
+            if (videoRef.current) {
+                videoRef.current.srcObject = stream;
+                await videoRef.current.play().catch(() => {});
+            }
+            setCameraOn(true);
+            setBannerDismissed(true);
+            toast.success('Camera AR enabled');
+        } catch (e: any) {
+            const msg = e?.name === 'NotAllowedError'
+                ? 'Camera permission denied. Allow camera access in browser settings and try again.'
+                : e?.name === 'NotFoundError'
+                ? 'No camera found on this device.'
+                : e?.message || 'Could not start camera.';
+            toast.error(msg);
+        } finally {
+            setCameraStarting(false);
+        }
+    };
+
+    const stopCameraAR = () => {
+        streamRef.current?.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+        if (videoRef.current) videoRef.current.srcObject = null;
+        setCameraOn(false);
+    };
+
+    useEffect(() => () => stopCameraAR(), []);
+
+    const startAR = () => {
+        if (xrSupported) {
+            xrStore.enterAR();
+            return;
+        }
+        // Universal fallback: camera passthrough + 3D overlay
+        startCameraAR();
     };
 
     const addShape = (shape: 'cube' | 'sphere' | 'cylinder' | 'cone') => {
@@ -189,21 +242,41 @@ export default function ARWorkspace() {
                     />
                 </div>
                 <div className="flex items-center gap-2">
-                    <button
-                        onClick={startAR}
-                        className="hidden items-center gap-1.5 rounded-full border border-accent/30 bg-accent/10 px-3 py-1.5 text-xs text-accent-soft hover:bg-accent/15 sm:flex"
-                    >
-                        <CameraIcon className="h-3.5 w-3.5" />
-                        {xrSupported ? 'Enter AR' : 'AR (unsupported)'}
-                    </button>
+                    {cameraOn ? (
+                        <button
+                            onClick={stopCameraAR}
+                            className="flex items-center gap-1.5 rounded-full border border-rose-400/30 bg-rose-500/10 px-3 py-1.5 text-xs text-rose-200 hover:bg-rose-500/15"
+                        >
+                            <X className="h-3.5 w-3.5" /> Stop Camera
+                        </button>
+                    ) : (
+                        <button
+                            onClick={startAR}
+                            disabled={cameraStarting}
+                            className="flex items-center gap-1.5 rounded-full border border-accent/30 bg-accent/10 px-3 py-1.5 text-xs text-accent-soft hover:bg-accent/15 disabled:opacity-60"
+                        >
+                            <CameraIcon className="h-3.5 w-3.5" />
+                            {cameraStarting ? 'Starting…' : xrSupported ? 'Enter AR' : 'Start Camera AR'}
+                        </button>
+                    )}
                     <button onClick={onSave} disabled={saving} className="btn-primary px-4 py-2 text-xs">
                         <Save className="h-3.5 w-3.5" /> {saving ? 'Saving…' : 'Save'}
                     </button>
                 </div>
             </div>
 
+            {/* Camera passthrough video (universal AR fallback) */}
+            <video
+                ref={videoRef}
+                playsInline
+                muted
+                autoPlay
+                className={`pointer-events-none absolute inset-0 h-full w-full object-cover ${cameraOn ? 'opacity-100' : 'opacity-0'}`}
+                style={{ zIndex: 0 }}
+            />
+
             {/* AR-unsupported banner */}
-            {xrChecked && !xrSupported && !bannerDismissed && (
+            {xrChecked && !xrSupported && !cameraOn && !bannerDismissed && (
                 <motion.div
                     initial={{ opacity: 0, y: -8 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -211,31 +284,35 @@ export default function ARWorkspace() {
                 >
                     <Info className="mt-0.5 h-4 w-4 flex-none text-amber-300" />
                     <div className="min-w-0 flex-1">
-                        <div className="font-medium text-amber-50">AR session not available on this device</div>
+                        <div className="font-medium text-amber-50">WebXR AR not available — use Camera AR instead</div>
                         <div className="mt-0.5 text-amber-100/80">
-                            {arUnsupportedReason} You can still build and preview your scene in 3D here — only camera passthrough needs a compatible device.
+                            {arUnsupportedReason} Tap <b>Start Camera AR</b> to use your device camera as the background and place 3D objects on top — works on iOS, Android and laptops.
                         </div>
                         <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                            <button
+                                onClick={startCameraAR}
+                                disabled={cameraStarting || !hasGetUserMedia}
+                                className="rounded-md bg-accent/20 px-2.5 py-1 text-[11px] font-medium text-accent-soft hover:bg-accent/30 disabled:opacity-60"
+                            >
+                                {cameraStarting ? 'Starting…' : 'Start Camera AR'}
+                            </button>
                             <span
-                                className={`rounded-md px-1.5 py-0.5 text-[10.5px] ${
-                                    isSecure ? 'bg-emerald-500/15 text-emerald-200' : 'bg-rose-500/15 text-rose-200'
-                                }`}
+                                className={`rounded-md px-1.5 py-0.5 text-[10.5px] ${isSecure ? 'bg-emerald-500/15 text-emerald-200' : 'bg-rose-500/15 text-rose-200'
+                                    }`}
                             >
                                 HTTPS: {isSecure ? 'yes' : 'no'}
                             </span>
                             <span
-                                className={`rounded-md px-1.5 py-0.5 text-[10.5px] ${
-                                    hasNavXR ? 'bg-emerald-500/15 text-emerald-200' : 'bg-rose-500/15 text-rose-200'
-                                }`}
+                                className={`rounded-md px-1.5 py-0.5 text-[10.5px] ${hasNavXR ? 'bg-emerald-500/15 text-emerald-200' : 'bg-rose-500/15 text-rose-200'
+                                    }`}
                             >
                                 navigator.xr: {hasNavXR ? 'present' : 'missing'}
                             </span>
                             <span
-                                className={`rounded-md px-1.5 py-0.5 text-[10.5px] ${
-                                    isMobile && !isIOS
+                                className={`rounded-md px-1.5 py-0.5 text-[10.5px] ${isMobile && !isIOS
                                         ? 'bg-emerald-500/15 text-emerald-200'
                                         : 'bg-amber-500/15 text-amber-200'
-                                }`}
+                                    }`}
                             >
                                 Device: {isIOS ? 'iOS' : isMobile ? 'Android/Mobile' : 'Desktop'}
                             </span>
@@ -318,10 +395,11 @@ export default function ARWorkspace() {
                 gl={{ antialias: true, alpha: true }}
                 camera={{ position: [2.2, 1.6, 2.6], fov: 50 }}
                 className="!h-full !w-full"
+                style={{ background: 'transparent', position: 'relative', zIndex: 1 }}
             >
                 <XR store={xrStore}>
-                    <color attach="background" args={['#070708']} />
-                    <fog attach="fog" args={['#070708', 8, 18]} />
+                    {!cameraOn && <color attach="background" args={['#070708']} />}
+                    {!cameraOn && <fog attach="fog" args={['#070708', 8, 18]} />}
 
                     <ambientLight intensity={0.35 * lighting} />
                     <directionalLight
@@ -335,19 +413,21 @@ export default function ARWorkspace() {
 
                     <Environment preset="city" environmentIntensity={reflections} />
 
-                    <Grid
-                        args={[20, 20]}
-                        cellSize={0.5}
-                        cellThickness={0.5}
-                        cellColor="#2a2d36"
-                        sectionSize={2.5}
-                        sectionThickness={1}
-                        sectionColor="#7b61ff"
-                        fadeDistance={14}
-                        fadeStrength={1.2}
-                        infiniteGrid
-                        position={[0, 0, 0]}
-                    />
+                    {!cameraOn && (
+                        <Grid
+                            args={[20, 20]}
+                            cellSize={0.5}
+                            cellThickness={0.5}
+                            cellColor="#2a2d36"
+                            sectionSize={2.5}
+                            sectionThickness={1}
+                            sectionColor="#7b61ff"
+                            fadeDistance={14}
+                            fadeStrength={1.2}
+                            infiniteGrid
+                            position={[0, 0, 0]}
+                        />
+                    )}
 
                     {shadows && (
                         <ContactShadows
