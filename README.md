@@ -4,8 +4,6 @@
 
 ### Place digital objects into the real world — directly from your browser.
 
-A production‑grade, full‑stack spatial visualization platform built with **WebXR**, **React Three Fiber**, **Express**, and **Supabase**.
-
 [![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white)](https://react.dev)
 [![Vite](https://img.shields.io/badge/Vite-5-646CFF?logo=vite&logoColor=white)](https://vitejs.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
@@ -17,27 +15,6 @@ A production‑grade, full‑stack spatial visualization platform built with **W
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](#license)
 
 </div>
-
----
-
-## Table of Contents
-
-- [Overview](#overview)
-- [Features](#features)
-- [Tech Stack](#tech-stack)
-- [Architecture](#architecture)
-- [Project Structure](#project-structure)
-- [Quick Start](#quick-start)
-- [Environment Variables](#environment-variables)
-- [Database Schema](#database-schema)
-- [API Reference](#api-reference)
-- [Available Scripts](#available-scripts)
-- [Deployment](#deployment)
-- [Roadmap](#roadmap)
-- [Contributing](#contributing)
-- [License](#license)
-
----
 
 ## Overview
 
