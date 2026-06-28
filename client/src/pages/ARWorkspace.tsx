@@ -342,7 +342,7 @@ export default function ARWorkspace() {
                 playsInline
                 muted
                 autoPlay
-                className={`pointer-events-none absolute inset-0 h-full w-full object-cover ${cameraOn ? 'opacity-100' : 'opacity-0'}`}
+                className={`pointer-events-none absolute inset-0 h-full w-full object-cover transition-opacity duration-300 ${cameraOn ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
                 style={{ zIndex: 0 }}
             />
 
@@ -555,7 +555,7 @@ export default function ARWorkspace() {
                     />
                     <directionalLight position={[-3, 2, -4]} intensity={0.4 * lighting} color="#8ea7ff" />
 
-                    <Environment preset="city" environmentIntensity={reflections} />
+                    <Environment preset="city" background={false} environmentIntensity={reflections} />
 
                     {!cameraOn && (
                         <Grid
