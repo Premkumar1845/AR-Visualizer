@@ -1,8 +1,6 @@
-import sharp from 'sharp';
 import { ensureSupabase } from '../config/supabase.js';
 import { env } from '../config/env.js';
 import { ApiError } from '../utils/ApiError.js';
-import { processObject, removeBackground } from '../xr-processing/pipeline.js';
 
 export const assetService = {
     async list(userId) {
@@ -19,37 +17,28 @@ export const assetService = {
     async upload({ userId, file }) {
         const sb = ensureSupabase();
 
-        // Remove background first, then optimise
-        const bgRemoved = await removeBackground(file.buffer);
-        const processed = await sharp(bgRemoved)
-            .rotate()
-            .resize({ width: 2048, height: 2048, fit: 'inside', withoutEnlargement: true })
-            .png({ compressionLevel: 8 })
-            .toBuffer();
-
-        const filename = `${userId}/${Date.now()}-${file.originalname.replace(/[^a-z0-9.\-]/gi, '_')}.png`;
+        // Store the original file as-is; background removal runs client-side via Canvas BFS
+        const ext = file.originalname.split('.').pop()?.toLowerCase() || 'png';
+        const safeName = file.originalname.replace(/[^a-z0-9.\-]/gi, '_');
+        const filename = `${userId}/${Date.now()}-${safeName}`;
 
         const { error: upErr } = await sb.storage
             .from(env.supabase.bucket)
-            .upload(filename, processed, { contentType: 'image/png', upsert: false });
+            .upload(filename, file.buffer, { contentType: file.mimetype, upsert: false });
         if (upErr) throw new ApiError(500, `Storage error: ${upErr.message}`);
 
         const { data: pub } = sb.storage.from(env.supabase.bucket).getPublicUrl(filename);
-
-        // Kick off (synchronously here, async-ready) the XR processing pipeline
-        const xr = await processObject(processed, file.mimetype);
 
         const { data, error } = await sb
             .from('uploaded_assets')
             .insert({
                 user_id: userId,
                 name: file.originalname,
-                mime_type: 'image/png',
-                size_bytes: processed.length,
+                mime_type: file.mimetype,
+                size_bytes: file.size,
                 storage_path: filename,
                 preview_url: pub.publicUrl,
                 status: 'ready',
-                metadata: xr,
             })
             .select('*')
             .single();
