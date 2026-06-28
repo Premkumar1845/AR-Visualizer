@@ -3,11 +3,12 @@ import { api } from './api';
 export interface SceneObject {
     id: string;
     assetId?: string;
+    textureUrl?: string;
     position: [number, number, number];
     rotation: [number, number, number];
     scale: [number, number, number];
     color?: string;
-    shape?: 'cube' | 'sphere' | 'cylinder' | 'cone';
+    shape?: 'cube' | 'sphere' | 'cylinder' | 'cone' | 'image';
 }
 
 export interface Scene {

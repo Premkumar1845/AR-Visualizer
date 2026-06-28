@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { TransformControls } from '@react-three/drei';
+import { TransformControls, useTexture } from '@react-three/drei';
 import * as THREE from 'three';
 import { useSceneStore, type ToolMode } from '../store/sceneStore';
 import type { SceneObject } from '../services/scene.service';
@@ -16,7 +16,64 @@ const MODE_MAP: Record<Exclude<ToolMode, 'select'>, 'translate' | 'rotate' | 'sc
     scale: 'scale',
 };
 
+/** Separate component so useTexture hook is only called when shape === 'image' */
+function ImagePlane({ obj, selected, onSelect }: Props) {
+    const meshRef = useRef<THREE.Mesh>(null!);
+    const tool = useSceneStore((s) => s.tool);
+    const update = useSceneStore((s) => s.update);
+    const texture = useTexture(obj.textureUrl || '/placeholder.png');
+    texture.colorSpace = THREE.SRGBColorSpace;
+
+    const mesh = (
+        <mesh
+            ref={meshRef}
+            position={obj.position}
+            rotation={obj.rotation}
+            scale={obj.scale}
+            castShadow
+            onClick={(e) => { e.stopPropagation(); onSelect(); }}
+            onPointerOver={(e) => { e.stopPropagation(); document.body.style.cursor = 'pointer'; }}
+            onPointerOut={() => { document.body.style.cursor = 'auto'; }}
+        >
+            <planeGeometry args={[1, 1]} />
+            <meshStandardMaterial
+                map={texture}
+                transparent={true}
+                alphaTest={0.05}
+                depthWrite={false}
+                side={THREE.DoubleSide}
+                emissive={selected ? new THREE.Color('#7b61ff') : new THREE.Color('#000000')}
+                emissiveIntensity={selected ? 0.18 : 0}
+            />
+        </mesh>
+    );
+
+    if (selected && tool !== 'select') {
+        return (
+            <TransformControls
+                mode={MODE_MAP[tool as Exclude<ToolMode, 'select'>]}
+                size={0.75}
+                onObjectChange={() => {
+                    const m = meshRef.current;
+                    if (!m) return;
+                    update(obj.id, {
+                        position: [m.position.x, m.position.y, m.position.z],
+                        rotation: [m.rotation.x, m.rotation.y, m.rotation.z],
+                        scale: [m.scale.x, m.scale.y, m.scale.z],
+                    });
+                }}
+            >
+                {mesh}
+            </TransformControls>
+        );
+    }
+    return mesh;
+}
+
 export default function PlacedObject({ obj, selected, onSelect }: Props) {
+    if (obj.shape === 'image') {
+        return <ImagePlane obj={obj} selected={selected} onSelect={onSelect} />;
+    }
     const meshRef = useRef<THREE.Mesh>(null!);
     const tool = useSceneStore((s) => s.tool);
     const update = useSceneStore((s) => s.update);
