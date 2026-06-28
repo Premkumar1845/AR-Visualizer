@@ -10,11 +10,12 @@ router.use(authMiddleware);
 const objectSchema = z.object({
     id: z.string(),
     assetId: z.string().optional(),
+    textureUrl: z.string().optional(),
     position: z.array(z.number()).length(3),
     rotation: z.array(z.number()).length(3),
     scale: z.array(z.number()).length(3),
     color: z.string().optional(),
-    shape: z.enum(['cube', 'sphere', 'cylinder', 'cone']).optional(),
+    shape: z.enum(['cube', 'sphere', 'cylinder', 'cone', 'image']).optional(),
 });
 
 const createSchema = z.object({
