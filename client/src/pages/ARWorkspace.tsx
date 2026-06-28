@@ -24,6 +24,8 @@ import {
     Layers,
     Info,
     X,
+    ChevronLeft,
+    ChevronRight,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useSceneStore } from '../store/sceneStore';
@@ -61,6 +63,7 @@ export default function ARWorkspace() {
 
     const [sceneName, setSceneName] = useState('Untitled Spatial Scene');
     const [saving, setSaving] = useState(false);
+    const [inspectorOpen, setInspectorOpen] = useState(true);
     const [xrSupported, setXrSupported] = useState(false);
     const [xrChecked, setXrChecked] = useState(false);
     const [bannerDismissed, setBannerDismissed] = useState(false);
@@ -158,7 +161,7 @@ export default function ARWorkspace() {
             streamRef.current = stream;
             if (videoRef.current) {
                 videoRef.current.srcObject = stream;
-                await videoRef.current.play().catch(() => {});
+                await videoRef.current.play().catch(() => { });
             }
             setCameraOn(true);
             setBannerDismissed(true);
@@ -167,8 +170,8 @@ export default function ARWorkspace() {
             const msg = e?.name === 'NotAllowedError'
                 ? 'Camera permission denied. Allow camera access in browser settings and try again.'
                 : e?.name === 'NotFoundError'
-                ? 'No camera found on this device.'
-                : e?.message || 'Could not start camera.';
+                    ? 'No camera found on this device.'
+                    : e?.message || 'Could not start camera.';
             toast.error(msg);
         } finally {
             setCameraStarting(false);
@@ -310,8 +313,8 @@ export default function ARWorkspace() {
                             </span>
                             <span
                                 className={`rounded-md px-1.5 py-0.5 text-[10.5px] ${isMobile && !isIOS
-                                        ? 'bg-emerald-500/15 text-emerald-200'
-                                        : 'bg-amber-500/15 text-amber-200'
+                                    ? 'bg-emerald-500/15 text-emerald-200'
+                                    : 'bg-amber-500/15 text-amber-200'
                                     }`}
                             >
                                 Device: {isIOS ? 'iOS' : isMobile ? 'Android/Mobile' : 'Desktop'}
@@ -460,108 +463,130 @@ export default function ARWorkspace() {
                 </XR>
             </Canvas>
 
+            {/* Inspector collapse toggle — visible when panel is closed */}
+            {!inspectorOpen && (
+                <button
+                    onClick={() => setInspectorOpen(true)}
+                    className="absolute right-3 top-20 z-20 flex items-center gap-1.5 rounded-xl border border-white/[0.06] bg-ink-900/80 px-3 py-2 text-xs font-semibold shadow-glass backdrop-blur-xl transition hover:bg-white/[0.06]"
+                >
+                    <ChevronLeft className="h-3.5 w-3.5" />
+                    Inspector
+                </button>
+            )}
+
             {/* Right Sidebar */}
-            <aside className="absolute right-3 top-20 z-20 flex max-h-[calc(100vh-180px)] w-72 flex-col gap-3 overflow-y-auto rounded-2xl border border-white/[0.06] bg-ink-900/80 p-4 shadow-glass backdrop-blur-xl scrollbar-hidden">
-                <div className="flex items-center justify-between">
-                    <div className="font-manrope text-sm font-semibold">Inspector</div>
-                    <span className="text-[10px] uppercase tracking-widest text-text-dim">
-                        {selectedObj ? selectedObj.shape : 'None selected'}
-                    </span>
-                </div>
+            {inspectorOpen && (
+                <aside className="absolute right-3 top-20 z-20 flex max-h-[calc(100vh-180px)] w-72 flex-col gap-3 overflow-y-auto rounded-2xl border border-white/[0.06] bg-ink-900/80 p-4 shadow-glass backdrop-blur-xl scrollbar-hidden">
+                    <div className="flex items-center justify-between">
+                        <div className="font-manrope text-sm font-semibold">Inspector</div>
+                        <div className="flex items-center gap-2">
+                            <span className="text-[10px] uppercase tracking-widest text-text-dim">
+                                {selectedObj ? selectedObj.shape : 'None selected'}
+                            </span>
+                            <button
+                                onClick={() => setInspectorOpen(false)}
+                                className="rounded-lg p-1 text-text-dim transition hover:bg-white/[0.06] hover:text-text-primary"
+                                title="Collapse Inspector"
+                            >
+                                <ChevronRight className="h-3.5 w-3.5" />
+                            </button>
+                        </div>
+                    </div>
 
-                {selectedObj ? (
-                    <>
-                        <PanelSection icon={Palette} title="Color">
-                            <div className="grid grid-cols-7 gap-1.5">
-                                {['#8ea7ff', '#7b61ff', '#a48dff', '#F5F7FA', '#34d399', '#fbbf24', '#f43f5e'].map(
-                                    (c) => (
-                                        <button
-                                            key={c}
-                                            onClick={() => setColor(c)}
-                                            style={{ background: c }}
-                                            className={`h-6 w-6 rounded-full ring-1 ring-white/15 transition-transform ${selectedObj.color === c ? 'scale-110 ring-white/60' : ''
-                                                }`}
-                                        />
-                                    ),
-                                )}
-                            </div>
-                        </PanelSection>
+                    {selectedObj ? (
+                        <>
+                            <PanelSection icon={Palette} title="Color">
+                                <div className="grid grid-cols-7 gap-1.5">
+                                    {['#8ea7ff', '#7b61ff', '#a48dff', '#F5F7FA', '#34d399', '#fbbf24', '#f43f5e'].map(
+                                        (c) => (
+                                            <button
+                                                key={c}
+                                                onClick={() => setColor(c)}
+                                                style={{ background: c }}
+                                                className={`h-6 w-6 rounded-full ring-1 ring-white/15 transition-transform ${selectedObj.color === c ? 'scale-110 ring-white/60' : ''
+                                                    }`}
+                                            />
+                                        ),
+                                    )}
+                                </div>
+                            </PanelSection>
 
-                        <PanelSection icon={Maximize2} title="Scale">
-                            <input
-                                type="range"
-                                min={0.1}
-                                max={2}
-                                step={0.05}
-                                value={selectedObj.scale[0]}
-                                onChange={(e) => {
-                                    const v = parseFloat(e.target.value);
-                                    update(selectedObj.id, { scale: [v, v, v] });
-                                }}
-                                className="w-full accent-accent"
-                            />
-                        </PanelSection>
+                            <PanelSection icon={Maximize2} title="Scale">
+                                <input
+                                    type="range"
+                                    min={0.1}
+                                    max={2}
+                                    step={0.05}
+                                    value={selectedObj.scale[0]}
+                                    onChange={(e) => {
+                                        const v = parseFloat(e.target.value);
+                                        update(selectedObj.id, { scale: [v, v, v] });
+                                    }}
+                                    className="w-full accent-accent"
+                                />
+                            </PanelSection>
 
-                        <PanelSection icon={RotateCcw} title="Rotation Y">
-                            <input
-                                type="range"
-                                min={0}
-                                max={Math.PI * 2}
-                                step={0.05}
-                                value={selectedObj.rotation[1]}
-                                onChange={(e) => {
-                                    const v = parseFloat(e.target.value);
-                                    update(selectedObj.id, {
-                                        rotation: [selectedObj.rotation[0], v, selectedObj.rotation[2]],
-                                    });
-                                }}
-                                className="w-full accent-accent"
-                            />
-                        </PanelSection>
-                    </>
-                ) : (
-                    <p className="rounded-xl border border-dashed border-white/[0.08] p-4 text-center text-xs text-text-dim">
-                        Select an object in the scene or add one from the left palette.
-                    </p>
-                )}
+                            <PanelSection icon={RotateCcw} title="Rotation Y">
+                                <input
+                                    type="range"
+                                    min={0}
+                                    max={Math.PI * 2}
+                                    step={0.05}
+                                    value={selectedObj.rotation[1]}
+                                    onChange={(e) => {
+                                        const v = parseFloat(e.target.value);
+                                        update(selectedObj.id, {
+                                            rotation: [selectedObj.rotation[0], v, selectedObj.rotation[2]],
+                                        });
+                                    }}
+                                    className="w-full accent-accent"
+                                />
+                            </PanelSection>
+                        </>
+                    ) : (
+                        <p className="rounded-xl border border-dashed border-white/[0.08] p-4 text-center text-xs text-text-dim">
+                            Select an object in the scene or add one from the left palette.
+                        </p>
+                    )}
 
-                <div className="my-1 h-px bg-white/[0.06]" />
+                    <div className="my-1 h-px bg-white/[0.06]" />
 
-                <PanelSection icon={Sun} title="Lighting">
-                    <input
-                        type="range"
-                        min={0}
-                        max={2}
-                        step={0.05}
-                        value={lighting}
-                        onChange={(e) => setLighting(parseFloat(e.target.value))}
-                        className="w-full accent-accent"
-                    />
-                </PanelSection>
-                <PanelSection icon={Droplet} title="Reflections">
-                    <input
-                        type="range"
-                        min={0}
-                        max={1}
-                        step={0.05}
-                        value={reflections}
-                        onChange={(e) => setReflections(parseFloat(e.target.value))}
-                        className="w-full accent-accent"
-                    />
-                </PanelSection>
-                <PanelSection icon={Layers} title="Shadows">
-                    <button
-                        onClick={() => setShadows(!shadows)}
-                        className={`flex w-full items-center justify-between rounded-lg border px-3 py-1.5 text-xs ${shadows
-                            ? 'border-accent/30 bg-accent/10 text-accent-soft'
-                            : 'border-white/10 bg-white/[0.02] text-text-muted'
-                            }`}
-                    >
-                        {shadows ? 'Enabled' : 'Disabled'}
-                        <span className="h-1.5 w-1.5 rounded-full bg-current" />
-                    </button>
-                </PanelSection>
-            </aside>
+                    <PanelSection icon={Sun} title="Lighting">
+                        <input
+                            type="range"
+                            min={0}
+                            max={2}
+                            step={0.05}
+                            value={lighting}
+                            onChange={(e) => setLighting(parseFloat(e.target.value))}
+                            className="w-full accent-accent"
+                        />
+                    </PanelSection>
+                    <PanelSection icon={Droplet} title="Reflections">
+                        <input
+                            type="range"
+                            min={0}
+                            max={1}
+                            step={0.05}
+                            value={reflections}
+                            onChange={(e) => setReflections(parseFloat(e.target.value))}
+                            className="w-full accent-accent"
+                        />
+                    </PanelSection>
+                    <PanelSection icon={Layers} title="Shadows">
+                        <button
+                            onClick={() => setShadows(!shadows)}
+                            className={`flex w-full items-center justify-between rounded-lg border px-3 py-1.5 text-xs ${shadows
+                                ? 'border-accent/30 bg-accent/10 text-accent-soft'
+                                : 'border-white/10 bg-white/[0.02] text-text-muted'
+                                }`}
+                        >
+                            {shadows ? 'Enabled' : 'Disabled'}
+                            <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                        </button>
+                    </PanelSection>
+                </aside>
+            )}
 
             {/* Bottom toolbar */}
             <motion.div
