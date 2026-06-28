@@ -13,20 +13,26 @@ export const sceneController = {
     }),
 
     create: asyncHandler(async (req, res) => {
+        const name = (req.body.name || '').trim() || 'Untitled Spatial Scene';
+        const objects = Array.isArray(req.body.objects) ? req.body.objects : [];
         const scene = await sceneService.create({
             userId: req.user.id,
-            name: req.body.name,
-            objects: req.body.objects,
-            thumbnail_url: req.body.thumbnail_url,
+            name,
+            objects,
+            thumbnail_url: req.body.thumbnail_url || null,
         });
         res.status(201).json({ scene });
     }),
 
     update: asyncHandler(async (req, res) => {
+        const patch = {};
+        if (req.body.name !== undefined) patch.name = (req.body.name || '').trim() || 'Untitled Spatial Scene';
+        if (req.body.objects !== undefined) patch.objects = Array.isArray(req.body.objects) ? req.body.objects : [];
+        if (req.body.thumbnail_url !== undefined) patch.thumbnail_url = req.body.thumbnail_url || null;
         const scene = await sceneService.update({
             userId: req.user.id,
             id: req.params.id,
-            patch: req.body,
+            patch,
         });
         res.json({ scene });
     }),
