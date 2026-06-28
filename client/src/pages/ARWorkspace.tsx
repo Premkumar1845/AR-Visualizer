@@ -150,33 +150,52 @@ export default function ARWorkspace() {
 
     const startCameraAR = async () => {
         if (!hasGetUserMedia) {
-            toast.error('Camera API not available in this browser.');
-            return;
-        }
-        if (!isSecure) {
-            toast.error('Camera requires HTTPS. Open the https:// URL.');
+            toast.error('Camera API not supported in this browser.');
             return;
         }
         setCameraStarting(true);
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: { ideal: 'environment' } as any },
-                audio: false,
-            });
+            // Try rear/environment camera first; fall back to any camera on desktop
+            let stream: MediaStream;
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: { ideal: 'environment' },
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 },
+                    },
+                    audio: false,
+                });
+            } catch {
+                // Fallback: accept any available camera (front-facing, webcam, etc.)
+                stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+            }
             streamRef.current = stream;
             if (videoRef.current) {
                 videoRef.current.srcObject = stream;
-                await videoRef.current.play().catch(() => { });
+                videoRef.current.muted = true;
+                try {
+                    await videoRef.current.play();
+                } catch {
+                    // Some browsers require muted+playsInline — already set via attributes
+                    videoRef.current.muted = true;
+                    await videoRef.current.play();
+                }
             }
             setCameraOn(true);
             setBannerDismissed(true);
             toast.success('Camera AR enabled');
         } catch (e: any) {
-            const msg = e?.name === 'NotAllowedError'
-                ? 'Camera permission denied. Allow camera access in browser settings and try again.'
-                : e?.name === 'NotFoundError'
-                    ? 'No camera found on this device.'
-                    : e?.message || 'Could not start camera.';
+            const msg =
+                e?.name === 'NotAllowedError'
+                    ? 'Camera permission denied — allow access in your browser settings.'
+                    : e?.name === 'NotFoundError'
+                        ? 'No camera found on this device.'
+                        : e?.name === 'OverconstrainedError'
+                            ? 'Camera constraints not satisfied — trying default camera.'
+                            : e?.name === 'NotReadableError'
+                                ? 'Camera is in use by another app. Close it and try again.'
+                                : e?.message || 'Could not start camera.';
             toast.error(msg);
         } finally {
             setCameraStarting(false);
@@ -201,12 +220,36 @@ export default function ARWorkspace() {
         startCameraAR();
     };
 
+    // Default panels closed on small screens
+    useEffect(() => {
+        if (window.innerWidth < 768) {
+            setPaletteOpen(false);
+            setInspectorOpen(false);
+        }
+    }, []);
+
     useEffect(() => {
         setAssetsLoading(true);
         assetService.list()
             .then((d) => setAssets((d.assets || []).filter((a) => a.status === 'ready')))
             .catch(() => { })
             .finally(() => setAssetsLoading(false));
+    }, []);
+
+    // Keyboard shortcut: Delete / Backspace removes the selected object
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+            const tag = (e.target as HTMLElement).tagName;
+            if (tag === 'INPUT' || tag === 'TEXTAREA') return; // don't fire while typing
+            const id = useSceneStore.getState().selectedId;
+            if (id) {
+                useSceneStore.getState().remove(id);
+                toast.success('Object deleted');
+            }
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
     }, []);
 
     const addAsset = (asset: Asset) => {
@@ -256,7 +299,7 @@ export default function ARWorkspace() {
     const selectedObj = objects.find((o) => o.id === selectedId);
 
     return (
-        <div className="relative h-[calc(100vh-56px)] lg:h-screen">
+        <div className="relative h-[calc(100dvh-108px)] sm:h-[calc(100dvh-56px)] lg:h-screen">
             {/* Top bar */}
             <div className="absolute inset-x-0 top-0 z-30 flex items-center justify-between gap-3 border-b border-white/[0.06] bg-ink-950/70 px-4 py-3 backdrop-blur-xl">
                 <div className="flex min-w-0 items-center gap-3">
@@ -402,7 +445,7 @@ export default function ARWorkspace() {
 
             {/* Add palette — expanded */}
             {paletteOpen && (
-                <div className="absolute left-3 top-20 z-20 flex max-h-[calc(100vh-180px)] w-52 flex-col gap-1.5 overflow-hidden rounded-2xl border border-white/[0.06] bg-ink-900/80 shadow-glass backdrop-blur-xl">
+                <div className="absolute left-3 top-20 z-20 flex max-h-[calc(100dvh-180px)] w-[clamp(180px,45vw,208px)] flex-col gap-1.5 overflow-hidden rounded-2xl border border-white/[0.06] bg-ink-900/80 shadow-glass backdrop-blur-xl">
                     {/* Header */}
                     <div className="flex items-center justify-between px-3 pt-3 pb-1">
                         <span className="font-manrope text-xs font-semibold text-text-primary">Objects</span>
@@ -496,6 +539,7 @@ export default function ARWorkspace() {
                 camera={{ position: [2.2, 1.6, 2.6], fov: 50 }}
                 className="!h-full !w-full"
                 style={{ background: 'transparent', position: 'relative', zIndex: 1 }}
+                onCreated={({ gl }) => { gl.setClearColor(0x000000, 0); }}
             >
                 <XR store={xrStore}>
                     {!cameraOn && <color attach="background" args={['#070708']} />}
@@ -573,13 +617,22 @@ export default function ARWorkspace() {
 
             {/* Right Sidebar */}
             {inspectorOpen && (
-                <aside className="absolute right-3 top-20 z-20 flex max-h-[calc(100vh-180px)] w-72 flex-col gap-3 overflow-y-auto rounded-2xl border border-white/[0.06] bg-ink-900/80 p-4 shadow-glass backdrop-blur-xl scrollbar-hidden">
+                <aside className="absolute right-3 top-20 z-20 flex max-h-[calc(100dvh-180px)] w-[clamp(220px,50vw,288px)] flex-col gap-3 overflow-y-auto rounded-2xl border border-white/[0.06] bg-ink-900/80 p-4 shadow-glass backdrop-blur-xl scrollbar-hidden">
                     <div className="flex items-center justify-between">
                         <div className="font-manrope text-sm font-semibold">Inspector</div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1">
                             <span className="text-[10px] uppercase tracking-widest text-text-dim">
                                 {selectedObj ? selectedObj.shape : 'None selected'}
                             </span>
+                            {selectedObj && (
+                                <button
+                                    onClick={() => { remove(selectedObj.id); toast.success('Object deleted'); }}
+                                    className="rounded-lg p-1 text-text-dim transition hover:bg-rose-500/10 hover:text-rose-400"
+                                    title="Delete object (Del)"
+                                >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                            )}
                             <button
                                 onClick={() => setInspectorOpen(false)}
                                 className="rounded-lg p-1 text-text-dim transition hover:bg-white/[0.06] hover:text-text-primary"
@@ -690,9 +743,9 @@ export default function ARWorkspace() {
                 initial={{ y: 30, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
                 transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-                className="absolute inset-x-0 bottom-4 z-20 flex justify-center px-4"
+                className="absolute inset-x-0 bottom-4 z-20 flex justify-center px-2 sm:px-4"
             >
-                <div className="flex items-center gap-1 rounded-full border border-white/[0.08] bg-ink-900/80 p-1.5 shadow-glass backdrop-blur-2xl">
+                <div className="flex items-center gap-1 overflow-x-auto rounded-full border border-white/[0.08] bg-ink-900/80 p-1.5 shadow-glass backdrop-blur-2xl scrollbar-hidden max-w-[calc(100vw-16px)]">
                     {[
                         { id: 'move', icon: Move3d, label: 'Move' },
                         { id: 'rotate', icon: RotateCcw, label: 'Rotate' },
