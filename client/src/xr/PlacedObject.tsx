@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useEffect } from 'react';
 import { TransformControls, useTexture } from '@react-three/drei';
 import * as THREE from 'three';
 import { useSceneStore, type ToolMode } from '../store/sceneStore';
@@ -19,10 +19,22 @@ const MODE_MAP: Record<Exclude<ToolMode, 'select'>, 'translate' | 'rotate' | 'sc
 /** Separate component so useTexture hook is only called when shape === 'image' */
 function ImagePlane({ obj, selected, onSelect }: Props) {
     const meshRef = useRef<THREE.Mesh>(null!);
+    const matRef = useRef<THREE.MeshStandardMaterial>(null!);
     const tool = useSceneStore((s) => s.tool);
     const update = useSceneStore((s) => s.update);
-    const texture = useTexture(obj.textureUrl || '/placeholder.png');
-    texture.colorSpace = THREE.SRGBColorSpace;
+
+    // Configure loader to allow cross-origin Supabase URLs
+    const texture = useTexture(obj.textureUrl || '/placeholder.png', (tex) => {
+        const t = Array.isArray(tex) ? tex[0] : tex;
+        t.colorSpace = THREE.SRGBColorSpace;
+        t.premultipliedAlpha = false;
+        t.needsUpdate = true;
+    });
+
+    // Ensure material re-evaluates when texture is ready
+    useEffect(() => {
+        if (matRef.current) matRef.current.needsUpdate = true;
+    }, [texture]);
 
     const mesh = (
         <mesh
@@ -37,11 +49,13 @@ function ImagePlane({ obj, selected, onSelect }: Props) {
         >
             <planeGeometry args={[1, 1]} />
             <meshStandardMaterial
+                ref={matRef}
                 map={texture}
                 transparent={true}
-                alphaTest={0.05}
+                alphaTest={0.1}
                 depthWrite={false}
                 side={THREE.DoubleSide}
+                toneMapped={false}
                 emissive={selected ? new THREE.Color('#7b61ff') : new THREE.Color('#000000')}
                 emissiveIntensity={selected ? 0.18 : 0}
             />
