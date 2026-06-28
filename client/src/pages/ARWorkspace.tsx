@@ -278,14 +278,25 @@ export default function ARWorkspace() {
         });
     };
 
+    /** Strip NaN / Infinity from numeric arrays before sending to the API */
+    const sanitizeObjects = (objs: typeof objects) =>
+        objs.map((o) => ({
+            ...o,
+            position: o.position.map((v) => (Number.isFinite(v) ? v : 0)) as [number, number, number],
+            rotation: o.rotation.map((v) => (Number.isFinite(v) ? v : 0)) as [number, number, number],
+            scale: o.scale.map((v) => (Number.isFinite(v) && v !== 0 ? v : 1)) as [number, number, number],
+        }));
+
     const onSave = async () => {
         setSaving(true);
+        const name = sceneName.trim() || 'Untitled Spatial Scene';
+        const safeObjects = sanitizeObjects(objects);
         try {
             if (sceneIdParam) {
-                await sceneService.update(sceneIdParam, { name: sceneName, objects });
+                await sceneService.update(sceneIdParam, { name, objects: safeObjects });
                 toast.success('Scene updated');
             } else {
-                const { scene } = await sceneService.create({ name: sceneName, objects });
+                const { scene } = await sceneService.create({ name, objects: safeObjects });
                 toast.success('Scene saved');
                 navigate(`/ar?scene=${scene.id}`, { replace: true });
             }
