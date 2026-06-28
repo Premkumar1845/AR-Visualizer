@@ -290,7 +290,9 @@ export default function ARWorkspace() {
                 navigate(`/ar?scene=${scene.id}`, { replace: true });
             }
         } catch (err: any) {
-            toast.error(err?.response?.data?.message || 'Could not save scene');
+            const msg = err?.response?.data?.message || err?.message || 'Could not save scene';
+            toast.error(msg, { duration: 6000 });
+            console.error('[save]', err?.response?.data || err);
         } finally {
             setSaving(false);
         }

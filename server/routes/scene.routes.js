@@ -9,25 +9,25 @@ router.use(authMiddleware);
 
 const objectSchema = z.object({
     id: z.string(),
-    assetId: z.string().optional(),
-    textureUrl: z.string().optional(),
+    assetId: z.string().nullish(),
+    textureUrl: z.string().nullish(),
     position: z.array(z.number()).length(3),
     rotation: z.array(z.number()).length(3),
     scale: z.array(z.number()).length(3),
-    color: z.string().optional(),
-    shape: z.enum(['cube', 'sphere', 'cylinder', 'cone', 'image']).optional(),
-});
+    color: z.string().nullish(),
+    shape: z.enum(['cube', 'sphere', 'cylinder', 'cone', 'image']).nullish(),
+}).passthrough();
 
 const createSchema = z.object({
     name: z.string().min(1).max(120),
     objects: z.array(objectSchema),
-    thumbnail_url: z.string().url().optional(),
+    thumbnail_url: z.string().url().nullish(),
 });
 
 const updateSchema = z.object({
     name: z.string().min(1).max(120).optional(),
     objects: z.array(objectSchema).optional(),
-    thumbnail_url: z.string().url().optional(),
+    thumbnail_url: z.string().url().nullish(),
 });
 
 router.get('/', sceneController.list);
