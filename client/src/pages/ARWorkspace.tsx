@@ -26,10 +26,12 @@ import {
     X,
     ChevronLeft,
     ChevronRight,
+    Loader2,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useSceneStore } from '../store/sceneStore';
 import { sceneService } from '../services/scene.service';
+import { assetService, type Asset } from '../services/asset.service';
 import PlacedObject from '../xr/PlacedObject';
 
 const xrStore = createXRStore();
@@ -64,6 +66,9 @@ export default function ARWorkspace() {
     const [sceneName, setSceneName] = useState('Untitled Spatial Scene');
     const [saving, setSaving] = useState(false);
     const [inspectorOpen, setInspectorOpen] = useState(true);
+    const [paletteOpen, setPaletteOpen] = useState(true);
+    const [assets, setAssets] = useState<Asset[]>([]);
+    const [assetsLoading, setAssetsLoading] = useState(false);
     const [xrSupported, setXrSupported] = useState(false);
     const [xrChecked, setXrChecked] = useState(false);
     const [bannerDismissed, setBannerDismissed] = useState(false);
@@ -194,6 +199,26 @@ export default function ARWorkspace() {
         }
         // Universal fallback: camera passthrough + 3D overlay
         startCameraAR();
+    };
+
+    useEffect(() => {
+        setAssetsLoading(true);
+        assetService.list()
+            .then((d) => setAssets((d.assets || []).filter((a) => a.status === 'ready')))
+            .catch(() => { })
+            .finally(() => setAssetsLoading(false));
+    }, []);
+
+    const addAsset = (asset: Asset) => {
+        add({
+            shape: 'image',
+            assetId: asset.id,
+            textureUrl: asset.preview_url,
+            position: [(Math.random() - 0.5) * 0.6, 0.5, (Math.random() - 0.5) * 0.6],
+            rotation: [0, 0, 0],
+            scale: [0.6, 0.6, 0.6],
+            color: '#ffffff',
+        });
     };
 
     const addShape = (shape: 'cube' | 'sphere' | 'cylinder' | 'cone') => {
@@ -364,32 +389,104 @@ export default function ARWorkspace() {
                 </motion.div>
             )}
 
-            {/* Add palette */}
-            <div className="absolute left-3 top-20 z-20 flex flex-col gap-1.5 rounded-2xl border border-white/[0.06] bg-ink-900/80 p-1.5 shadow-glass backdrop-blur-xl">
-                {[
-                    { s: 'cube', icon: Box, label: 'Cube' },
-                    { s: 'sphere', icon: Circle, label: 'Sphere' },
-                    { s: 'cylinder', icon: Cylinder, label: 'Cylinder' },
-                    { s: 'cone', icon: Cone, label: 'Cone' },
-                ].map((b) => (
-                    <button
-                        key={b.s}
-                        title={`Add ${b.label}`}
-                        onClick={() => addShape(b.s as any)}
-                        className="grid h-9 w-9 place-items-center rounded-xl text-text-muted hover:bg-white/[0.06] hover:text-text-primary"
-                    >
-                        <b.icon className="h-4 w-4" />
-                    </button>
-                ))}
-                <div className="my-1 h-px bg-white/[0.06]" />
+            {/* Add palette — collapsed pill */}
+            {!paletteOpen && (
                 <button
-                    onClick={() => addShape('cube')}
-                    className="grid h-9 w-9 place-items-center rounded-xl bg-accent/15 text-accent-soft hover:bg-accent/25"
-                    title="Quick add"
+                    onClick={() => setPaletteOpen(true)}
+                    className="absolute left-3 top-20 z-20 flex items-center gap-1.5 rounded-xl border border-white/[0.06] bg-ink-900/80 px-3 py-2 text-xs font-semibold shadow-glass backdrop-blur-xl transition hover:bg-white/[0.06]"
                 >
-                    <Plus className="h-4 w-4" />
+                    Objects
+                    <ChevronRight className="h-3.5 w-3.5" />
                 </button>
-            </div>
+            )}
+
+            {/* Add palette — expanded */}
+            {paletteOpen && (
+                <div className="absolute left-3 top-20 z-20 flex max-h-[calc(100vh-180px)] w-52 flex-col gap-1.5 overflow-hidden rounded-2xl border border-white/[0.06] bg-ink-900/80 shadow-glass backdrop-blur-xl">
+                    {/* Header */}
+                    <div className="flex items-center justify-between px-3 pt-3 pb-1">
+                        <span className="font-manrope text-xs font-semibold text-text-primary">Objects</span>
+                        <button
+                            onClick={() => setPaletteOpen(false)}
+                            className="rounded-lg p-1 text-text-dim transition hover:bg-white/[0.06] hover:text-text-primary"
+                            title="Collapse palette"
+                        >
+                            <ChevronLeft className="h-3.5 w-3.5" />
+                        </button>
+                    </div>
+
+                    {/* Shapes */}
+                    <div className="px-2 pb-1">
+                        <p className="mb-1 px-1 text-[10px] uppercase tracking-widest text-text-dim">Shapes</p>
+                        <div className="grid grid-cols-4 gap-1">
+                            {[
+                                { s: 'cube', icon: Box, label: 'Cube' },
+                                { s: 'sphere', icon: Circle, label: 'Sphere' },
+                                { s: 'cylinder', icon: Cylinder, label: 'Cylinder' },
+                                { s: 'cone', icon: Cone, label: 'Cone' },
+                            ].map((b) => (
+                                <button
+                                    key={b.s}
+                                    title={`Add ${b.label}`}
+                                    onClick={() => addShape(b.s as any)}
+                                    className="grid h-9 w-full place-items-center rounded-xl text-text-muted hover:bg-white/[0.06] hover:text-text-primary"
+                                >
+                                    <b.icon className="h-4 w-4" />
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="mx-2 h-px bg-white/[0.06]" />
+
+                    {/* Uploaded Images */}
+                    <div className="flex flex-col gap-1 overflow-y-auto px-2 pb-3 scrollbar-hidden">
+                        <div className="mb-1 flex items-center justify-between px-1">
+                            <p className="text-[10px] uppercase tracking-widest text-text-dim">My Images</p>
+                            {assetsLoading && <Loader2 className="h-3 w-3 animate-spin text-text-dim" />}
+                        </div>
+                        {!assetsLoading && assets.length === 0 && (
+                            <p className="rounded-lg border border-dashed border-white/[0.08] p-3 text-center text-[10px] text-text-dim">
+                                Upload images in<br />Upload Studio
+                            </p>
+                        )}
+                        <div className="grid grid-cols-2 gap-1.5">
+                            {assets.map((asset) => (
+                                <button
+                                    key={asset.id}
+                                    title={asset.name}
+                                    onClick={() => addAsset(asset)}
+                                    className="group relative aspect-square overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.03] hover:border-accent/40 hover:bg-accent/[0.06] transition"
+                                >
+                                    <img
+                                        src={asset.preview_url}
+                                        alt={asset.name}
+                                        className="h-full w-full object-cover opacity-80 group-hover:opacity-100 transition"
+                                    />
+                                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent p-1">
+                                        <p className="truncate text-[9px] text-white/70">{asset.name}</p>
+                                    </div>
+                                    <div className="absolute inset-0 grid place-items-center opacity-0 group-hover:opacity-100 transition">
+                                        <Plus className="h-5 w-5 text-white drop-shadow" />
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Quick add */}
+                    <div className="border-t border-white/[0.06] p-2">
+                        <button
+                            onClick={() => addShape('cube')}
+                            className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-accent/15 py-2 text-xs text-accent-soft hover:bg-accent/25"
+                            title="Quick add cube"
+                        >
+                            <Plus className="h-3.5 w-3.5" />
+                            Quick Add
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* Canvas */}
             <Canvas
