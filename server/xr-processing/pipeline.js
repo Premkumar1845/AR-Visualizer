@@ -4,20 +4,13 @@ import sharp from 'sharp';
  * XR Object Processing Pipeline
  * ─────────────────────────────────────────────────────────
  * Stages:
- *   1. Background removal  — flood-fill from corners + edge feather
+ *   1. Background removal  — robust border-sampling + BFS flood-fill + edge feather
  *   2. Metadata extraction
  *   3. Edge / silhouette estimation
  *   4. Depth estimation hook (pluggable ML provider)
  */
 
-/**
- * Remove background from an image buffer and return a transparent PNG buffer.
- * Strategy: sample corner pixels to determine background color, then
- * flood-fill (BFS) any pixel within `tolerance` of that color, setting it
- * transparent. A small feather pass softens hard edges.
- */
-export async function removeBackground(buffer, { tolerance = 35 } = {}) {
-    // Work at a capped resolution to keep memory/time reasonable
+export async function removeBackground(buffer, { tolerance = 55 } = {}) {
     const MAX = 1024;
     const img = sharp(buffer).rotate();
     const meta = await img.metadata();
@@ -33,33 +26,51 @@ export async function removeBackground(buffer, { tolerance = 35 } = {}) {
         .toBuffer({ resolveWithObject: true });
 
     const pixels = new Uint8Array(raw.buffer);
-    const stride = 4; // RGBA
+    const stride = 4;
 
-    const idx = (x, y) => (y * w + x) * stride;
+    // ── Step 1: Sample ~60 pixels along all 4 borders for robust background color ──
+    const rSamples = [], gSamples = [], bSamples = [];
+    const step = Math.max(1, Math.floor(Math.min(w, h) / 15));
 
-    // Sample background color as average of the four corners
-    const corners = [
-        [0, 0], [w - 1, 0], [0, h - 1], [w - 1, h - 1],
-    ];
-    let br = 0, bg = 0, bb = 0;
-    for (const [cx, cy] of corners) {
-        const i = idx(cx, cy);
-        br += pixels[i]; bg += pixels[i + 1]; bb += pixels[i + 2];
+    for (let x = 0; x < w; x += step) {
+        for (const y of [0, h - 1]) {
+            const i = (y * w + x) * stride;
+            rSamples.push(pixels[i]); gSamples.push(pixels[i + 1]); bSamples.push(pixels[i + 2]);
+        }
     }
-    br = Math.round(br / 4); bg = Math.round(bg / 4); bb = Math.round(bb / 4);
+    for (let y = 0; y < h; y += step) {
+        for (const x of [0, w - 1]) {
+            const i = (y * w + x) * stride;
+            rSamples.push(pixels[i]); gSamples.push(pixels[i + 1]); bSamples.push(pixels[i + 2]);
+        }
+    }
+    // Always include corners
+    for (const [cx, cy] of [[0, 0], [w - 1, 0], [0, h - 1], [w - 1, h - 1]]) {
+        const i = (cy * w + cx) * stride;
+        rSamples.push(pixels[i]); gSamples.push(pixels[i + 1]); bSamples.push(pixels[i + 2]);
+    }
+
+    // Use MEDIAN (not mean) — robust against object pixels near edges
+    const median = (arr) => {
+        const s = [...arr].sort((a, b) => a - b);
+        return s[Math.floor(s.length / 2)];
+    };
+    const bgR = median(rSamples);
+    const bgG = median(gSamples);
+    const bgB = median(bSamples);
 
     const colorDist = (i) => {
-        const dr = pixels[i] - br;
-        const dg = pixels[i + 1] - bg;
-        const db = pixels[i + 2] - bb;
+        const dr = pixels[i] - bgR;
+        const dg = pixels[i + 1] - bgG;
+        const db = pixels[i + 2] - bgB;
         return Math.sqrt(dr * dr + dg * dg + db * db);
     };
 
-    // BFS flood-fill from all four edges
-    const visited = new Uint8Array(w * h); // 0=unseen,1=bg,2=fg
+    // ── Step 2: BFS flood-fill from ALL border pixels ──
+    const visited = new Uint8Array(w * h); // 1=background, 2=foreground, 0=unvisited
     const queue = [];
 
-    const enqueue = (x, y) => {
+    const tryEnqueue = (x, y) => {
         if (x < 0 || x >= w || y < 0 || y >= h) return;
         const pi = y * w + x;
         if (visited[pi]) return;
@@ -68,12 +79,12 @@ export async function removeBackground(buffer, { tolerance = 35 } = {}) {
             visited[pi] = 1;
             queue.push(x, y);
         } else {
-            visited[pi] = 2; // foreground border — don't expand
+            visited[pi] = 2;
         }
     };
 
-    for (let x = 0; x < w; x++) { enqueue(x, 0); enqueue(x, h - 1); }
-    for (let y = 0; y < h; y++) { enqueue(0, y); enqueue(w - 1, y); }
+    for (let x = 0; x < w; x++) { tryEnqueue(x, 0); tryEnqueue(x, h - 1); }
+    for (let y = 0; y < h; y++) { tryEnqueue(0, y); tryEnqueue(w - 1, y); }
 
     let qi = 0;
     while (qi < queue.length) {
@@ -93,29 +104,48 @@ export async function removeBackground(buffer, { tolerance = 35 } = {}) {
         }
     }
 
-    // Apply alpha: background pixels → fully transparent; feather edge pixels
+    // ── Step 3: Second pass — remove fringe pixels adjacent to background (higher tolerance) ──
+    const fringeTolerance = tolerance * 1.5;
     for (let y = 0; y < h; y++) {
         for (let x = 0; x < w; x++) {
             const pi = y * w + x;
-            const ri = pi * stride;
-            if (visited[pi] === 1) {
-                pixels[ri + 3] = 0; // fully transparent
-            } else if (visited[pi] === 0) {
-                // Unvisited interior — keep as-is (fully opaque)
-                pixels[ri + 3] = 255;
+            if (visited[pi] !== 2) continue;
+            if (colorDist(pi * stride) > fringeTolerance) continue;
+            for (const [nx, ny] of [[x - 1, y], [x + 1, y], [x, y - 1], [x, y + 1]]) {
+                if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
+                if (visited[ny * w + nx] === 1) { visited[pi] = 1; break; }
             }
-            // visited[pi] === 2 means foreground — leave alpha alone
         }
     }
 
-    // Re-encode as PNG (lossless, supports alpha)
-    const output = await sharp(Buffer.from(pixels.buffer), {
-        raw: { width: w, height: h, channels: 4 },
-    })
-        .png({ compressionLevel: 8 })
-        .toBuffer();
+    // ── Step 4: Write alpha — background=0, foreground=255 ──
+    for (let p = 0; p < w * h; p++) {
+        pixels[p * stride + 3] = visited[p] === 1 ? 0 : 255;
+    }
 
-    return output;
+    // ── Step 5: 3×3 box-blur on the alpha channel only — smooths jagged edges ──
+    const alphaSmooth = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+            let sum = 0, count = 0;
+            for (let dy = -1; dy <= 1; dy++) {
+                for (let dx = -1; dx <= 1; dx++) {
+                    const nx = x + dx, ny = y + dy;
+                    if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
+                    sum += pixels[(ny * w + nx) * stride + 3];
+                    count++;
+                }
+            }
+            alphaSmooth[y * w + x] = Math.round(sum / count);
+        }
+    }
+    for (let p = 0; p < w * h; p++) {
+        pixels[p * stride + 3] = alphaSmooth[p];
+    }
+
+    return sharp(Buffer.from(pixels.buffer), { raw: { width: w, height: h, channels: 4 } })
+        .png({ compressionLevel: 9 })
+        .toBuffer();
 }
 
 export async function processObject(buffer, mimeType) {
@@ -124,7 +154,7 @@ export async function processObject(buffer, mimeType) {
     const depthHints = await estimateDepth(buffer);
 
     return {
-        pipeline_version: '3.2.0',
+        pipeline_version: '3.3.0',
         mime_type: mimeType,
         width: meta.width,
         height: meta.height,
@@ -160,3 +190,4 @@ async function estimateSilhouette(buffer) {
 async function estimateDepth(_buffer) {
     return { method: 'placeholder', depth_layers: 1, confidence: 0.6 };
 }
+
