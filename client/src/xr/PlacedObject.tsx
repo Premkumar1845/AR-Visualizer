@@ -46,7 +46,7 @@ function removeBgCanvas(
                 // CORS tainted — just use raw texture without removal
                 const tex = new THREE.CanvasTexture(canvas);
                 tex.colorSpace = THREE.SRGBColorSpace;
-                tex.premultipliedAlpha = false;
+                tex.premultiplyAlpha = false;
                 resolve(tex);
                 return;
             }
@@ -101,7 +101,7 @@ function removeBgCanvas(
             let qi = 0;
             while (qi < queue.length) {
                 const x = queue[qi++], y = queue[qi++];
-                for (const [nx, ny] of [[x-1,y],[x+1,y],[x,y-1],[x,y+1]] as [number,number][]) {
+                for (const [nx, ny] of [[x - 1, y], [x + 1, y], [x, y - 1], [x, y + 1]] as [number, number][]) {
                     if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
                     const pi = ny * w + nx;
                     if (visited[pi]) continue;
@@ -118,7 +118,7 @@ function removeBgCanvas(
                 for (let x = 0; x < w; x++) {
                     const pi = y * w + x;
                     if (visited[pi] !== 2 || dist(pi * stride) > tolerance * 1.6) continue;
-                    for (const [nx, ny] of [[x-1,y],[x+1,y],[x,y-1],[x,y+1]] as [number,number][]) {
+                    for (const [nx, ny] of [[x - 1, y], [x + 1, y], [x, y - 1], [x, y + 1]] as [number, number][]) {
                         if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
                         if (visited[ny * w + nx] === 1) { visited[pi] = 1; break; }
                     }
@@ -151,7 +151,7 @@ function removeBgCanvas(
 
             const tex = new THREE.CanvasTexture(canvas);
             tex.colorSpace = THREE.SRGBColorSpace;
-            tex.premultipliedAlpha = false;
+            tex.premultiplyAlpha = false;
             tex.needsUpdate = true;
             resolve(tex);
         };
